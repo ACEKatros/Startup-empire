@@ -3,232 +3,213 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Flappy Bird Clone</title>
+<title>Sky Rush</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{
-    margin:0;
-    background:#70c5ce;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
-    overflow:hidden;
-    font-family:Arial,sans-serif;
+body {
+    margin: 0;
+    background: linear-gradient(#6ec6ff, #dff6ff);
+    font-family: Arial;
+    overflow: hidden;
+    text-align: center;
 }
-canvas{
-    border:4px solid #222;
-    max-width:100%;
-    background:linear-gradient(#70c5ce,#bdefff);
+
+canvas {
+    display: block;
+    margin: auto;
+    background: transparent;
+    border: 3px solid #222;
+}
+
+#ui {
+    position: absolute;
+    width: 100%;
+    top: 10px;
+    color: white;
+    text-shadow: 1px 1px 3px black;
+}
+
+button {
+    padding: 10px 15px;
+    margin: 5px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+#shop {
+    display: none;
+    position: absolute;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.7);
+    padding: 20px;
+    border-radius: 10px;
+    color: white;
 }
 </style>
 </head>
 <body>
 
-<canvas id="game" width="400" height="600"></canvas>
+<div id="ui">
+<h2>Sky Rush</h2>
+<p id="info">Click / Space to fly</p>
+<button onclick="openShop()">Shop</button>
+<button onclick="resetGame()">Restart</button>
+</div>
+
+<div id="shop">
+<h3>Shop</h3>
+<p>Coins: <span id="coinsDisplay">0</span></p>
+<button onclick="buySkin('yellow',10)">Yellow Bird (10)</button>
+<button onclick="buySkin('red',20)">Red Bird (20)</button>
+<button onclick="buySkin('blue',30)">Blue Bird (30)</button>
+<br><br>
+<button onclick="closeShop()">Close</button>
+</div>
+
+<canvas id="game" width="420" height="600"></canvas>
 
 <script>
-const canvas=document.getElementById("game");
-const ctx=canvas.getContext("2d");
+const c = document.getElementById("game");
+const ctx = c.getContext("2d");
 
-let state="menu";
+let bird = { x: 100, y: 250, vel: 0, r: 16, color: "yellow" };
+let gravity = 0.5;
+let jump = -8;
 
-const bird={
-    x:100,
-    y:250,
-    r:18,
-    vel:0,
-    gravity:0.5,
-    jump:-8
+let pipes = [];
+let coins = 0;
+let score = 0;
+let best = localStorage.getItem("bestSky") || 0;
+let ownedSkins = JSON.parse(localStorage.getItem("skins") || '["yellow"]');
+
+let gameState = "menu";
+let frame = 0;
+
+const sounds = {
+    jump: new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg"),
+    score: new Audio("https://actions.google.com/sounds/v1/cartoon/pop.ogg"),
+    hit: new Audio("https://actions.google.com/sounds/v1/impacts/crash.ogg")
 };
 
-let pipes=[];
-let score=0;
-let best=localStorage.getItem("flappyBest")||0;
-let frame=0;
-
-function resetGame(){
-    bird.y=250;
-    bird.vel=0;
-    pipes=[];
-    score=0;
-    frame=0;
-    state="playing";
-}
+function play(s){ sounds[s].play(); }
 
 function flap(){
-    if(state==="menu"){
-        resetGame();
+    if(gameState !== "playing"){
+        gameState = "playing";
         return;
     }
-    if(state==="gameover"){
-        resetGame();
-        return;
-    }
-    bird.vel=bird.jump;
+    bird.vel = jump;
+    play("jump");
 }
 
-document.addEventListener("keydown",e=>{
-    if(e.code==="Space") flap();
+document.addEventListener("keydown", e => {
+    if(e.code === "Space") flap();
 });
 
-canvas.addEventListener("mousedown",flap);
-canvas.addEventListener("touchstart",e=>{
-    e.preventDefault();
-    flap();
-});
+c.addEventListener("click", flap);
+c.addEventListener("touchstart", e => { e.preventDefault(); flap(); });
 
 function spawnPipe(){
-    const gap=150;
-    const top=Math.random()*250+50;
+    let gap = 140;
+    let top = Math.random()*200 + 80;
 
     pipes.push({
-        x:canvas.width,
-        top:top,
-        bottom:top+gap,
-        scored:false
+        x: 420,
+        top: top,
+        bottom: top + gap,
+        passed: false
     });
 }
 
 function update(){
-
-    if(state!=="playing") return;
+    if(gameState !== "playing") return;
 
     frame++;
 
-    bird.vel+=bird.gravity;
-    bird.y+=bird.vel;
+    bird.vel += gravity;
+    bird.y += bird.vel;
 
-    if(frame%90===0){
-        spawnPipe();
-    }
+    if(frame % 90 === 0) spawnPipe();
 
-    for(let i=pipes.length-1;i>=0;i--){
-        let p=pipes[i];
-        p.x-=3.5;
+    for(let p of pipes){
+        p.x -= 3.5;
 
-        if(!p.scored && p.x+60<bird.x){
+        if(!p.passed && p.x < bird.x){
             score++;
-            p.scored=true;
+            coins++;
+            p.passed = true;
+            play("score");
         }
 
         if(
-            bird.x+bird.r>p.x &&
-            bird.x-bird.r<p.x+60 &&
-            (
-                bird.y-bird.r<p.top ||
-                bird.y+bird.r>p.bottom
-            )
+            bird.x + bird.r > p.x &&
+            bird.x - bird.r < p.x + 60 &&
+            (bird.y - bird.r < p.top || bird.y + bird.r > p.bottom)
         ){
-            gameOver();
-        }
-
-        if(p.x<-70){
-            pipes.splice(i,1);
+            die();
         }
     }
 
-    if(bird.y+bird.r>canvas.height || bird.y-bird.r<0){
-        gameOver();
+    pipes = pipes.filter(p => p.x > -80);
+
+    if(bird.y > 600 || bird.y < 0){
+        die();
     }
+
+    if(score > best){
+        best = score;
+        localStorage.setItem("bestSky", best);
+    }
+
+    document.getElementById("coinsDisplay").innerText = coins;
 }
 
-function gameOver(){
-    state="gameover";
-
-    if(score>best){
-        best=score;
-        localStorage.setItem("flappyBest",best);
-    }
+function die(){
+    gameState = "dead";
+    play("hit");
 }
 
-function drawBackground(){
-    ctx.fillStyle="#70c5ce";
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-
-    ctx.fillStyle="rgba(255,255,255,.4)";
-    for(let i=0;i<5;i++){
-        ctx.beginPath();
-        ctx.arc((i*100+(frame*.3)%500)%500,80+i*20,25,0,Math.PI*2);
-        ctx.fill();
-    }
-}
-
-function drawBird(){
-    ctx.save();
-
-    ctx.translate(bird.x,bird.y);
-    ctx.rotate(Math.min(bird.vel*0.05,0.8));
-
-    ctx.fillStyle="gold";
-    ctx.beginPath();
-    ctx.arc(0,0,bird.r,0,Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle="orange";
-    ctx.fillRect(10,-4,14,8);
-
-    ctx.fillStyle="white";
-    ctx.beginPath();
-    ctx.arc(5,-5,5,0,Math.PI*2);
-    ctx.fill();
-
-    ctx.fillStyle="black";
-    ctx.beginPath();
-    ctx.arc(7,-5,2,0,Math.PI*2);
-    ctx.fill();
-
-    ctx.restore();
-}
-
-function drawPipes(){
-    ctx.fillStyle="#2ecc71";
-
-    pipes.forEach(p=>{
-        ctx.fillRect(p.x,0,60,p.top);
-        ctx.fillRect(p.x,p.bottom,60,canvas.height-p.bottom);
-    });
-}
-
-function drawText(){
-    ctx.fillStyle="white";
-    ctx.textAlign="center";
-
-    if(state==="menu"){
-        ctx.font="40px Arial";
-        ctx.fillText("Flappy Bird",200,180);
-
-        ctx.font="22px Arial";
-        ctx.fillText("Click or Press Space",200,240);
-
-        ctx.font="18px Arial";
-        ctx.fillText("Best: "+best,200,290);
-    }
-
-    if(state==="playing"){
-        ctx.font="40px Arial";
-        ctx.fillText(score,200,80);
-    }
-
-    if(state==="gameover"){
-        ctx.font="42px Arial";
-        ctx.fillText("Game Over",200,220);
-
-        ctx.font="26px Arial";
-        ctx.fillText("Score: "+score,200,280);
-
-        ctx.fillText("Best: "+best,200,320);
-
-        ctx.font="20px Arial";
-        ctx.fillText("Click to Restart",200,380);
-    }
+function resetGame(){
+    bird.y = 250;
+    bird.vel = 0;
+    pipes = [];
+    score = 0;
+    frame = 0;
+    gameState = "playing";
 }
 
 function draw(){
-    drawBackground();
-    drawPipes();
-    drawBird();
-    drawText();
+    ctx.clearRect(0,0,420,600);
+
+    // bird
+    ctx.fillStyle = bird.color;
+    ctx.beginPath();
+    ctx.arc(bird.x,bird.y,bird.r,0,Math.PI*2);
+    ctx.fill();
+
+    // pipes
+    ctx.fillStyle = "green";
+    for(let p of pipes){
+        ctx.fillRect(p.x,0,60,p.top);
+        ctx.fillRect(p.x,p.bottom,60,600);
+    }
+
+    // score
+    ctx.fillStyle = "white";
+    ctx.font = "24px Arial";
+    ctx.fillText("Score: " + score, 10, 30);
+    ctx.fillText("Best: " + best, 10, 60);
+
+    if(gameState === "menu"){
+        ctx.fillText("Click to Start", 140, 300);
+    }
+
+    if(gameState === "dead"){
+        ctx.fillText("Game Over", 150, 300);
+        ctx.fillText("Click Restart", 130, 340);
+    }
 }
 
 function loop(){
@@ -236,8 +217,26 @@ function loop(){
     draw();
     requestAnimationFrame(loop);
 }
-
 loop();
+
+// SHOP
+function openShop(){
+    document.getElementById("shop").style.display = "block";
+}
+function closeShop(){
+    document.getElementById("shop").style.display = "none";
+}
+
+function buySkin(color, cost){
+    if(coins >= cost && !ownedSkins.includes(color)){
+        coins -= cost;
+        ownedSkins.push(color);
+        localStorage.setItem("skins", JSON.stringify(ownedSkins));
+        bird.color = color;
+    } else {
+        alert("Not enough coins or already owned!");
+    }
+}
 </script>
 
 </body>
